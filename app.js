@@ -7,11 +7,26 @@
   let reducedMotion = motionPreference.matches;
   let paused = motionPreference.matches;
   let showOrbits = true;
-  let width = 0, height = 0, dpr = 1, time = 0, lastFrame = 0;
+  let width = 0, height = 0, dpr = 1, time = 0, effectsTime = 0, lastFrame = 0;
   let zoom = 1, targetZoom = 1, selected = null, hovered = null;
   let background, frameId, toastTimeout, sound = null;
   let trueDistances = false, showMoons = true, cameraX = 0, cameraY = 0, trackedPosition = null;
-  const DAYS_PER_SECOND = 2;
+  // Each step expresses simulated time per real second, across useful scales.
+  const speedOptions = [
+    { days: 1 / 86400, value: '1', unit: 's/s', description: 'Skutečný čas · 1 sekunda za sekundu' },
+    { days: 1 / 1440, value: '1', unit: 'min/s', description: '1 minuta za sekundu' },
+    { days: 1 / 24, value: '1', unit: 'h/s', description: '1 hodina za sekundu' },
+    { days: .25, value: '6', unit: 'h/s', description: '6 hodin za sekundu' },
+    { days: .5, value: '12', unit: 'h/s', description: '12 hodin za sekundu' },
+    { days: 1, value: '1', unit: 'd/s', description: '1 den za sekundu' },
+    { days: 2, value: '2', unit: 'd/s', description: '2 dny za sekundu · výchozí tempo' },
+    { days: 7, value: '7', unit: 'd/s', description: '1 týden za sekundu' },
+    { days: 30, value: '30', unit: 'd/s', description: '30 dní za sekundu' },
+    { days: 365.256, value: '1', unit: 'r/s', description: '1 rok za sekundu · jeden oběh Země' },
+    { days: 3652.56, value: '10', unit: 'r/s', description: '10 let za sekundu' },
+    { days: 36525.6, value: '100', unit: 'r/s', description: '100 let za sekundu · i vnější planety v pohybu' },
+  ];
+  let speedIndex = 6;
   const MIN_ZOOM = .00001, MAX_ZOOM = 2000000;
   const pointer = { x: 0, y: 0, smoothX: 0, smoothY: 0, active: false };
   const meteors = [], ripples = [], touches = new Map();
@@ -218,7 +233,7 @@
       const surface = ctx.createRadialGradient(p.x - p.r * .3, p.y - p.r * .3, 0, p.x, p.y, p.r); surface.addColorStop(0, '#fff2c4'); surface.addColorStop(.65, '#f4cf91'); surface.addColorStop(.9, '#d99550'); surface.addColorStop(1, '#a9652d'); ctx.fillStyle = surface; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
       if (body.texture) { ctx.drawImage(body.texture, p.x - p.r, p.y - p.r, p.r * 2, p.r * 2); ctx.save(); ctx.globalCompositeOperation = 'screen'; const illumination = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r); illumination.addColorStop(0, '#fff3cdba'); illumination.addColorStop(.7, '#ffeab68a'); illumination.addColorStop(1, '#ffce7950'); ctx.fillStyle = illumination; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
       ctx.save(); ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.clip();
-      if (!body.texture) for (let i = 0; i < 160; i++) { const angle = i * 2.39996, radius = Math.sqrt(i / 160) * p.r; ctx.fillStyle = `rgba(149,80,26,${.06 + Math.sin(i + time * .1) * .025})`; ctx.beginPath(); ctx.arc(p.x + Math.cos(angle) * radius, p.y + Math.sin(angle) * radius, p.r * .035, 0, Math.PI * 2); ctx.fill(); } ctx.restore();
+      if (!body.texture) for (let i = 0; i < 160; i++) { const angle = i * 2.39996, radius = Math.sqrt(i / 160) * p.r; ctx.fillStyle = `rgba(149,80,26,${.06 + Math.sin(i + effectsTime * .2) * .025})`; ctx.beginPath(); ctx.arc(p.x + Math.cos(angle) * radius, p.y + Math.sin(angle) * radius, p.r * .035, 0, Math.PI * 2); ctx.fill(); } ctx.restore();
     } else {
       if (body.ring) ring(body, p, false);
       if (body.id === 'earth') { const glow = ctx.createRadialGradient(p.x, p.y, p.r * .94, p.x, p.y, p.r * 1.12); glow.addColorStop(0, '#8abeb625'); glow.addColorStop(.5, '#68a5a010'); glow.addColorStop(1, '#689f9900'); ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 1.12, 0, Math.PI * 2); ctx.fill(); }
@@ -267,7 +282,7 @@
       const p = orbitalPoint(radius * zoom, rock.angle + time * 2 * Math.PI / (365.256 * rock.au ** 1.5));
       const x = center.x + p.x, y = center.y + p.y;
       if (x < 0 || x > width || y < 0 || y > height) continue;
-      ctx.save(); ctx.translate(x, y); ctx.rotate(rock.angle + time * .06); ctx.beginPath();
+      ctx.save(); ctx.translate(x, y); ctx.rotate(rock.angle + effectsTime * .12); ctx.beginPath();
       for (let i = 0; i < rock.shape.length; i++) { const a = i / rock.shape.length * Math.PI * 2, r = rock.size * Math.min(zoom, 3) * rock.shape[i]; const px = Math.cos(a) * r, py = Math.sin(a) * r; if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }
       ctx.closePath(); ctx.fillStyle = '#7c817074'; ctx.strokeStyle = '#c1b79a59'; ctx.lineWidth = .4; ctx.fill(); ctx.stroke(); ctx.restore();
     }
@@ -318,8 +333,11 @@
   }
   function render(timestamp) {
     if (motionPreference.matches !== reducedMotion) applyMotionPreference(motionPreference.matches);
-    const realDt = Math.min((timestamp - (lastFrame || timestamp)) / 1000, .05); lastFrame = timestamp;
-    const dt = paused ? 0 : realDt; time += dt * DAYS_PER_SECOND;
+    const elapsed = Math.max(0, (timestamp - (lastFrame || timestamp)) / 1000);
+    const realDt = Math.min(elapsed, .05); lastFrame = timestamp;
+    const dt = paused ? 0 : realDt;
+    time += (paused ? 0 : elapsed) * speedOptions[speedIndex].days;
+    effectsTime += dt;
     const ease = 1 - Math.exp(-realDt * 4);
     pointer.smoothX = mix(pointer.smoothX, pointer.x, ease); pointer.smoothY = mix(pointer.smoothY, pointer.y, ease);
     zoom = motionPreference.matches ? targetZoom : Math.exp(mix(Math.log(zoom), Math.log(targetZoom), ease));
@@ -337,7 +355,7 @@
     ctx.drawImage(background, 0, 0, width, height);
     for (const star of stars) {
       let x = star.x * width + pointer.smoothX * star.depth * 14, y = star.y * height + pointer.smoothY * star.depth * 11;
-      const alpha = star.brightness * (.78 + Math.sin(time * .5 + star.phase) * .22);
+      const alpha = star.brightness * (.78 + Math.sin(effectsTime + star.phase) * .22);
       ctx.fillStyle = star.warm ? `rgba(218,194,153,${alpha})` : `rgba(199,214,206,${alpha})`;
       ctx.beginPath(); ctx.arc(x, y, star.radius * (width <= 760 ? .7 : 1), 0, Math.PI * 2); ctx.fill();
       if (star.radius > 1.45 && star.brightness > .7) { ctx.strokeStyle = `rgba(219,230,211,${alpha * .26})`; ctx.lineWidth = .5; ctx.beginPath(); ctx.moveTo(x - 3, y); ctx.lineTo(x + 3, y); ctx.moveTo(x, y - 3); ctx.lineTo(x, y + 3); ctx.stroke(); }
@@ -420,7 +438,29 @@
   $('moon-toggle').addEventListener('click', () => { showMoons = !showMoons; $('moon-toggle').setAttribute('aria-pressed', String(showMoons)); $('moon-toggle').textContent = showMoons ? 'Měsíce viditelné' : 'Měsíce skryté'; hovered = null; $('planet-label').hidden = true; if (!showMoons && selected?.parent) selectBody(selected.parent); });
   $('distance-toggle').addEventListener('click', () => { trueDistances = !trueDistances; $('distance-toggle').setAttribute('aria-pressed', String(trueDistances)); $('distance-toggle').textContent = trueDistances ? 'Skutečné vzdálenosti' : 'Přehledné vzdálenosti'; cameraX = cameraY = 0; zoom = trueDistances ? Math.min(width * .31, height * .3) / orbitRadius(planets[7]) : 1; reset(); notify(trueDistances ? 'Ve skutečném měřítku jsou planety drobné. Vyber je v seznamu.' : 'Dráhy jsou zkrácené. Poměry velikostí zůstávají skutečné.'); });
   for (const id of ['home-button', 'close-card', 'return-button', 'reset-button']) $(id).addEventListener('click', reset);
-  function syncPause() { $('pause-button').setAttribute('aria-pressed', String(paused)); $('pause-button').setAttribute('aria-label', paused ? 'Spustit animaci' : 'Pozastavit animaci'); $('pause-button').querySelector('span').textContent = paused ? 'Spustit' : 'Pozastavit'; $('pause-button').querySelector('svg').innerHTML = paused ? '<path d="m6 4 9 6-9 6V4Z"/>' : '<path d="M7 5v10M13 5v10"/>'; $('speed-label').innerHTML = `${paused ? '0' : DAYS_PER_SECOND}<span>d/s</span>`; }
+  function syncSpeed() {
+    const speed = speedOptions[speedIndex];
+    const label = `${speed.value} ${speed.unit}`;
+    $('speed-button-value').textContent = label;
+    $('speed-button').setAttribute('aria-label', `Změnit rychlost simulace: ${speed.description}${paused ? ', pozastaveno' : ''}`);
+    $('speed-output').textContent = label;
+    $('speed-description').textContent = speed.description;
+    $('speed-range').value = speedIndex;
+    $('speed-range').setAttribute('aria-valuetext', speed.description);
+    $('speed-range').style.setProperty('--speed-progress', `${speedIndex / (speedOptions.length - 1) * 100}%`);
+    $('speed-status').textContent = paused ? 'Čas stojí. Zvolené tempo se použije po spuštění.' : 'Tempo mění oběhy všech planet a měsíců společně.';
+    $('speed-label').innerHTML = `${paused ? '0' : speed.value}<span>${speed.unit}</span>`;
+    document.querySelectorAll('[data-speed-index]').forEach(button => button.setAttribute('aria-pressed', String(Number(button.dataset.speedIndex) === speedIndex)));
+  }
+  function setSpeed(index) {
+    if (!Number.isInteger(index) || index < 0 || index >= speedOptions.length) return;
+    speedIndex = index;
+    syncSpeed();
+  }
+  $('speed-range').addEventListener('input', event => setSpeed(Number(event.target.value)));
+  document.querySelectorAll('[data-speed-index]').forEach(button => button.addEventListener('click', () => setSpeed(Number(button.dataset.speedIndex))));
+  $('speed-panel').addEventListener('toggle', event => $('speed-button').setAttribute('aria-expanded', String(event.newState === 'open')));
+  function syncPause() { $('pause-button').setAttribute('aria-pressed', String(paused)); $('pause-button').setAttribute('aria-label', paused ? 'Spustit animaci' : 'Pozastavit animaci'); $('pause-button').querySelector('span').textContent = paused ? 'Spustit' : 'Pozastavit'; $('pause-button').querySelector('svg').innerHTML = paused ? '<path d="m6 4 9 6-9 6V4Z"/>' : '<path d="M7 5v10M13 5v10"/>'; syncSpeed(); }
   $('pause-button').addEventListener('click', () => { paused = !paused; syncPause(); });
   function applyMotionPreference(value) { reducedMotion = value; paused = value; pointer.x = pointer.y = 0; syncPause(); }
   motionPreference.addEventListener('change', () => applyMotionPreference(motionPreference.matches));
@@ -428,7 +468,11 @@
   $('guide-button').addEventListener('click', () => $('guide-dialog').showModal());
   for (const id of ['close-guide', 'guide-start']) $(id).addEventListener('click', () => $('guide-dialog').close());
   $('guide-dialog').addEventListener('click', (event) => { if (event.target === $('guide-dialog')) { const rect = event.target.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) event.target.close(); } });
-  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !$('guide-dialog').open) reset(); });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || $('guide-dialog').open) return;
+    if ($('speed-panel').matches(':popover-open')) { event.preventDefault(); $('speed-panel').hidePopover(); return; }
+    reset();
+  });
   async function toggleSound() {
     try {
       if (!sound) {
@@ -441,6 +485,7 @@
       await sound.audio.resume(); sound.enabled = !sound.enabled;
       sound.gain.gain.cancelScheduledValues(sound.audio.currentTime); sound.gain.gain.setTargetAtTime(sound.enabled ? .22 : 0, sound.audio.currentTime, .4);
       $('sound-button').setAttribute('aria-pressed', String(sound.enabled)); $('sound-button').querySelector('span').textContent = sound.enabled ? 'Zvuk zapnutý' : 'Zvuk vypnutý';
+      $('sound-button').setAttribute('aria-label', sound.enabled ? 'Vypnout zvuk' : 'Zapnout zvuk');
     } catch { notify('Zvuk nelze spustit. Zkus to znovu.'); }
   }
   $('sound-button').addEventListener('click', toggleSound);

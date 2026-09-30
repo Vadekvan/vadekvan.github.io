@@ -33,6 +33,14 @@
   let pinchDistance = 0;
 
   const data = window.SOLAR_SYSTEM;
+  const ephemeris = window.AstraEphemeris;
+  let ephemerides = null, simulationEpoch = Date.now(), liveTime = false, lastClockUpdate = 0;
+  const positionCache = new Map();
+  try {
+    ephemerides = ephemeris.validateDataset(window.ASTRA_EPHEMERIS, [...data.planets.map(p => p.id), ...data.moons.map(m => m[0])]);
+  } catch (error) { console.warn('ASTRA: astronomická data nejsou dostupná.', error.message); }
+  const simulationUtc = () => simulationEpoch + time * 86400000;
+  const simulationJd = () => ephemeris.julianDay(simulationUtc(), ephemerides);
   const format = (number, digits = 0) => number.toLocaleString('cs-CZ', { maximumFractionDigits: digits });
   const sun = { id: 'sun', name: 'Slunce', diameterKm: data.sunDiameterKm, color: '#f5cf91', kind: 'HVĚZDA · SRDCE NAŠÍ SOUSTAVY', description: 'Slunce má přibližně 109krát větší průměr než Země a desetkrát větší než Jupiter. V jeho nitru jaderná fúze mění vodík na helium. Září na všechny planety a určuje jejich denní a noční stranu.', facts: [['Průměr', `${format(data.sunDiameterKm)} km`], ['Poměr k Zemi', '109 : 1'], ['Teplota povrchu', '≈ 5 500 °C']] };
   const planets = data.planets.map((body, index) => ({ ...body, index, moons: [], facts: [['Průměr', `${format(body.diameterKm)} km`], ['Od Slunce', `${format(body.au, 3)} AU`], ['Doba oběhu', `${format(body.period, 2)} dní`]] }));
@@ -179,11 +187,34 @@
   function resize() {
     width = window.innerWidth; height = window.innerHeight; dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    makeBackground();
+    positionCache.clear(); makeBackground();
+  }
+  function projectVector(vector, body) {
+    // Fixed oblique view of the J2000 ecliptic. Keep real 3D orientations,
+    // shortening only each body's distance scale in overview mode.
+    const scale = trueDistances ? sunRadius() * 2 / data.sunDiameterKm :
+      body.parentId ? satelliteRadius(body) / body.orbitKm : orbitRadius(body) / (body.au * data.auKm);
+    const x = vector.x * scale, y = (-vector.y * .72 + vector.z * Math.sqrt(1 - .72 ** 2)) * scale;
+    const rotation = -.2;
+    return { x: x * Math.cos(rotation) - y * Math.sin(rotation), y: x * Math.sin(rotation) + y * Math.cos(rotation),
+      z: (vector.y * Math.sqrt(1 - .72 ** 2) + vector.z * .72) * scale };
+  }
+  function satelliteRadius(body) {
+    return trueDistances ? body.orbitKm * sunRadius() * 2 / data.sunDiameterKm :
+      sunRadius() * body.parent.diameterKm / data.sunDiameterKm * (1.8 + Math.log2(1 + body.orbitKm / (body.parent.diameterKm / 2)) * .45);
   }
   function basePosition(body) {
+    if (positionCache.has(body.id)) return positionCache.get(body.id);
+    const p = computeBasePosition(body); positionCache.set(body.id, p); return p;
+  }
+  function computeBasePosition(body) {
     const r = sunRadius() * body.diameterKm / data.sunDiameterKm;
     if (body === sun) return { x: 0, y: 0, z: 0, r };
+    if (ephemerides) {
+      const orbit = projectVector(ephemeris.position(ephemerides, body.id, simulationJd()), body);
+      const parent = body.parentId ? basePosition(body.parent) : { x: 0, y: 0, z: 0 };
+      return { x: parent.x + orbit.x, y: parent.y + orbit.y, z: parent.z + orbit.z, r };
+    }
     if (body.parentId) {
       const parent = basePosition(body.parent);
       const radius = trueDistances ? body.orbitKm * sunRadius() * 2 / data.sunDiameterKm : parent.r * (1.8 + Math.log2(1 + body.orbitKm / (body.parent.diameterKm / 2)) * .45);
@@ -250,6 +281,24 @@
   }
   function drawOrbits() {
     if (!showOrbits) return;
+    if (ephemerides) {
+      const parent = selected?.parent || selected;
+      const orbitBodies = [...planets, ...(showMoons && parent?.moons ? parent.moons : [])];
+      const jd = simulationJd();
+      for (const body of orbitBodies) {
+        const radius = (body.parentId ? satelliteRadius(body) : orbitRadius(body)) * zoom;
+        if (radius > Math.max(width, height) * (body.parentId ? 4 : 6)) continue;
+        const center = position(body.parent || sun), row = ephemeris.elements(ephemerides, body.id, jd);
+        ctx.beginPath();
+        for (let i = 0; i <= 96; i++) {
+          const p = projectVector(ephemeris.propagate(row, jd, i / 96 * Math.PI * 2), body);
+          if (i === 0) ctx.moveTo(center.x + p.x * zoom, center.y + p.y * zoom);
+          else ctx.lineTo(center.x + p.x * zoom, center.y + p.y * zoom);
+        }
+        ctx.setLineDash(body.parentId ? [2, 5] : []); ctx.strokeStyle = '#adb9a928'; ctx.lineWidth = body.parentId ? .6 : .65; ctx.stroke();
+      }
+      ctx.setLineDash([]); return;
+    }
     const center = position(sun);
     for (const planet of planets) {
       const radius = orbitRadius(planet) * zoom;
@@ -336,7 +385,10 @@
     const elapsed = Math.max(0, (timestamp - (lastFrame || timestamp)) / 1000);
     const realDt = Math.min(elapsed, .05); lastFrame = timestamp;
     const dt = paused ? 0 : realDt;
-    time += (paused ? 0 : elapsed) * speedOptions[speedIndex].days;
+    if (liveTime && !paused) time = (Date.now() - simulationEpoch) / 86400000;
+    else time += (paused ? 0 : elapsed) * speedOptions[speedIndex].days;
+    positionCache.clear();
+    if (timestamp - lastClockUpdate > 200) { updateSimulationClock(); lastClockUpdate = timestamp; }
     effectsTime += dt;
     const ease = 1 - Math.exp(-realDt * 4);
     pointer.smoothX = mix(pointer.smoothX, pointer.x, ease); pointer.smoothY = mix(pointer.smoothY, pointer.y, ease);
@@ -436,7 +488,7 @@
   $('explore-button').addEventListener('click', () => selectBody(bodyById.get('earth')));
   $('parent-button').addEventListener('click', () => { if (selected?.parent) selectBody(selected.parent); });
   $('moon-toggle').addEventListener('click', () => { showMoons = !showMoons; $('moon-toggle').setAttribute('aria-pressed', String(showMoons)); $('moon-toggle').textContent = showMoons ? 'Měsíce viditelné' : 'Měsíce skryté'; hovered = null; $('planet-label').hidden = true; if (!showMoons && selected?.parent) selectBody(selected.parent); });
-  $('distance-toggle').addEventListener('click', () => { trueDistances = !trueDistances; $('distance-toggle').setAttribute('aria-pressed', String(trueDistances)); $('distance-toggle').textContent = trueDistances ? 'Skutečné vzdálenosti' : 'Přehledné vzdálenosti'; cameraX = cameraY = 0; zoom = trueDistances ? Math.min(width * .31, height * .3) / orbitRadius(planets[7]) : 1; reset(); notify(trueDistances ? 'Ve skutečném měřítku jsou planety drobné. Vyber je v seznamu.' : 'Dráhy jsou zkrácené. Poměry velikostí zůstávají skutečné.'); });
+  $('distance-toggle').addEventListener('click', () => { trueDistances = !trueDistances; positionCache.clear(); $('distance-toggle').setAttribute('aria-pressed', String(trueDistances)); $('distance-toggle').textContent = trueDistances ? 'Skutečné vzdálenosti' : 'Přehledné vzdálenosti'; cameraX = cameraY = 0; zoom = trueDistances ? Math.min(width * .31, height * .3) / orbitRadius(planets[7]) : 1; reset(); notify(trueDistances ? 'Ve skutečném měřítku jsou planety drobné. Vyber je v seznamu.' : 'Dráhy jsou zkrácené. Poměry velikostí zůstávají skutečné.'); });
   for (const id of ['home-button', 'close-card', 'return-button', 'reset-button']) $(id).addEventListener('click', reset);
   function syncSpeed() {
     const speed = speedOptions[speedIndex];
@@ -455,14 +507,15 @@
   function setSpeed(index) {
     if (!Number.isInteger(index) || index < 0 || index >= speedOptions.length) return;
     speedIndex = index;
-    syncSpeed();
+    if (index !== 0) liveTime = false;
+    syncSpeed(); updateSimulationClock();
   }
   $('speed-range').addEventListener('input', event => setSpeed(Number(event.target.value)));
   document.querySelectorAll('[data-speed-index]').forEach(button => button.addEventListener('click', () => setSpeed(Number(button.dataset.speedIndex))));
   $('speed-panel').addEventListener('toggle', event => $('speed-button').setAttribute('aria-expanded', String(event.newState === 'open')));
   function syncPause() { $('pause-button').setAttribute('aria-pressed', String(paused)); $('pause-button').setAttribute('aria-label', paused ? 'Spustit animaci' : 'Pozastavit animaci'); $('pause-button').querySelector('span').textContent = paused ? 'Spustit' : 'Pozastavit'; $('pause-button').querySelector('svg').innerHTML = paused ? '<path d="m6 4 9 6-9 6V4Z"/>' : '<path d="M7 5v10M13 5v10"/>'; syncSpeed(); }
-  $('pause-button').addEventListener('click', () => { paused = !paused; syncPause(); });
-  function applyMotionPreference(value) { reducedMotion = value; paused = value; pointer.x = pointer.y = 0; syncPause(); }
+  $('pause-button').addEventListener('click', () => { paused = !paused; if (paused) liveTime = false; syncPause(); updateSimulationClock(); });
+  function applyMotionPreference(value) { reducedMotion = value; paused = value; if (value) liveTime = false; pointer.x = pointer.y = 0; syncPause(); updateSimulationClock(); }
   motionPreference.addEventListener('change', () => applyMotionPreference(motionPreference.matches));
   $('orbit-button').addEventListener('click', () => { showOrbits = !showOrbits; $('orbit-button').setAttribute('aria-pressed', String(showOrbits)); $('orbit-button').style.color = showOrbits ? '' : '#5e6b61'; });
   $('guide-button').addEventListener('click', () => $('guide-dialog').showModal());
@@ -489,8 +542,34 @@
     } catch { notify('Zvuk nelze spustit. Zkus to znovu.'); }
   }
   $('sound-button').addEventListener('click', toggleSound);
+  function returnToNow(live = false) {
+    simulationEpoch = Date.now(); time = 0; lastFrame = 0; positionCache.clear();
+    if (live) { speedIndex = 0; paused = false; liveTime = true; }
+    if (selected) { trackedPosition = basePosition(selected); cameraX = trackedPosition.x; cameraY = trackedPosition.y; }
+    syncPause(); updateSimulationClock();
+    notify(live ? 'Živě: soustava sleduje aktuální čas.' : 'Datum vráceno na teď. Zvolené tempo zůstává.');
+  }
+  $('live-button').addEventListener('click', () => returnToNow(true));
+  $('now-button').addEventListener('click', () => returnToNow());
+  const dateFormatter = new Intl.DateTimeFormat('cs-CZ', { timeZone: 'UTC', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
+  function updateSimulationClock() {
+    const utc = simulationUtc(), date = new Date(utc);
+    $('simulation-date').textContent = `${dateFormatter.format(date)} UTC`;
+    $('simulation-date').dateTime = date.toISOString();
+    $('time-mode').textContent = paused ? 'POZASTAVENO' : liveTime ? 'ŽIVĚ' : 'SIMULACE';
+    $('live-button').setAttribute('aria-pressed', String(liveTime && !paused));
+    const status = $('ephemeris-status');
+    const covered = ephemerides && ephemeris.coverage(ephemerides, [...planets, ...moons].map(b => b.id), simulationJd());
+    status.dataset.quality = !ephemerides ? 'unavailable' : covered ? 'ephemeris' : 'prediction';
+    status.textContent = !ephemerides ? 'Ilustrativní polohy · data nedostupná' : covered ? 'Polohy podle JPL · interpolace' : 'Přibližná predikce · mimo data JPL';
+    if (ephemerides) {
+      const rows = ephemerides.bodies.moon.samples;
+      const asUtc = jd => dateFormatter.format(new Date((jd - 2440587.5) * 86400000 - ephemerides.utcToTdbSeconds * 1000));
+      status.title = `NASA/JPL Horizons · data stažena ${dateFormatter.format(new Date(ephemerides.generatedAt))} UTC. Společný rozsah: ${asUtc(rows[0][0])} – ${asUtc(rows[rows.length - 1][0])} UTC. Mezi epochami interpolace Keplerových drah; mimo rozsah přibližná predikce.`;
+    }
+  }
   document.addEventListener('visibilitychange', () => { if (document.hidden) { cancelAnimationFrame(frameId); if (sound) sound.audio.suspend().catch(() => {}); } else { lastFrame = 0; frameId = requestAnimationFrame(render); if (sound?.enabled) sound.audio.resume().catch(() => {}); } });
   function updateClock() { $('utc-clock').textContent = `${new Date().toISOString().slice(11, 19)} UTC`; }
-  updateClock(); setInterval(updateClock, 1000); syncPause();
+  updateClock(); updateSimulationClock(); setInterval(updateClock, 1000); syncPause();
   window.addEventListener('resize', resize); resize(); frameId = requestAnimationFrame(render);
 })();

@@ -47,3 +47,16 @@ dialog a{color:#c6b297;text-underline-offset:3px}
 .speed-presets button:hover,.speed-presets button[aria-pressed=true]{border-color:#e6b48b70;color:var(--accent);background:#e6b48b08}
 #speed-status{font-size:9px;line-height:1.7;color:#82967d;margin:15px 0 0;min-height:30px}
 @media(max-width:760px){.scene-controls{gap:7px;padding:12px 10px}.scene-controls #pause-button span,.scene-controls #sound-button span{display:none}.speed-panel{bottom:94px;padding:20px}.speed-presets button{padding:11px 5px}}
+
+.time-tools{position:absolute;left:50%;top:232px;z-index:2;display:flex;gap:15px;align-items:center;max-width:44%;padding:10px 12px;border-left:1px solid #aec3aa33;background:#0b1412a8;backdrop-filter:blur(12px);border-radius:0 4px 4px 0}
+.simulation-clock{display:flex;flex-direction:column;gap:5px;min-width:0}
+#time-mode{font:7px 'Space Grotesk',monospace;letter-spacing:1.5px;color:var(--accent)}
+#simulation-date{font:10px 'Space Grotesk',monospace;font-variant-numeric:tabular-nums;white-space:nowrap;color:#d2dcd0}
+#ephemeris-status{font-size:8px;color:#899d88}
+#ephemeris-status[data-quality=prediction],#ephemeris-status[data-quality=unavailable]{color:var(--accent)}
+.time-actions{display:flex;gap:6px}
+.time-actions button{background:#b3c2a609;border:1px solid var(--line);padding:9px 10px;border-radius:4px;white-space:nowrap;color:#b6c2b4;font-size:9px}
+.time-actions button:hover,.time-actions button[aria-pressed=true]{color:var(--accent);border-color:#e6b48b70}
+@media(max-width:1100px){.time-tools{top:200px;gap:10px}.time-actions{flex-direction:column}.time-actions button{font-size:8px;padding:6px 8px}}
+@media(max-width:760px){.time-tools{left:7%;right:7%;max-width:none;top:auto;bottom:257px;padding:9px 10px;justify-content:space-between;gap:5px}.time-actions{flex-direction:row;gap:5px}.time-actions button{font-size:8px;padding:9px 7px}#simulation-date{font-size:9px}#ephemeris-status{font-size:7px}#time-mode{font-size:6px}}
+@media(max-height:650px) and (min-width:761px){.time-tools{top:173px;padding:7px 10px}}

@@ -1,5 +1,5 @@
 // Mean diameters, average orbital distances and periods. Sources: NASA / JPL.
-// These are explanatory orbits, not ephemerides for the current date.
+// Mean dimensions and fallback orbits; dated JPL elements are loaded separately.
 window.SOLAR_SYSTEM = {
   auKm: 149597870.7,
   sunDiameterKm: 1392700,

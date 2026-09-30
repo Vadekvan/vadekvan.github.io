@@ -5,3 +5,22 @@
 @media(max-width:760px){.header{height:76px;margin:0 6%;gap:0;justify-content:space-between}.brand{font-size:23px}.brand svg{width:25px}.header nav{gap:20px}.nav-link{font-size:10px}.header-status{display:none}.intro{left:7%;top:15%}h1{font-size:61px;letter-spacing:-3.5px;margin:18px 0 13px}.eyebrow{font-size:7px;letter-spacing:1.8px}.intro p{font-size:11px;line-height:1.8;margin-bottom:20px}.explore-button{font-size:10px;padding:13px 16px;gap:22px}.mouse-hint{display:none}.scene-coordinate{left:auto;right:6%;top:98px;font-size:6px;text-align:right;letter-spacing:.5px}.scene-coordinate span:first-child{font-size:7px}.telemetry{display:none}.planet-picker{width:86%;bottom:105px}.planet-buttons{gap:5px;justify-content:space-between}.planet-button{flex-direction:column;gap:7px;padding:9px 7px;font-size:8px;flex:1}.picker-caption{font-size:7px;margin-bottom:10px}.footer{left:6%;right:6%;height:83px;justify-content:center}.footer-note,.zoom-hint{display:none}.scene-controls{gap:11px;padding:12px 14px}.scene-controls button{font-size:9px}.planet-card{top:15%;left:7%;width:270px;padding:23px;background:#0b1412f2}.planet-card h2{font-size:35px;margin:18px 0 12px}.planet-card p{font-size:11px}.planet-facts{margin-top:15px}.planet-fact{padding:10px 0;font-size:9px}.text-button{margin-top:17px}.vignette{background:linear-gradient(90deg,#070c0d55,transparent),linear-gradient(0deg,#070c0d 2%,transparent 31%,transparent 58%,#070c0d44)}.toast{bottom:190px;white-space:nowrap;max-width:90%;font-size:10px}dialog{padding:30px}dialog h2{font-size:29px}}
 @media(max-height:650px) and (min-width:761px){.header{height:75px}.intro{top:23%}h1{font-size:62px;margin:15px 0}.intro p{margin-bottom:17px}.mouse-hint{margin-top:17px}.scene-coordinate{top:99px}.planet-picker{bottom:95px}.footer{height:72px}.telemetry-item{margin-top:16px}.telemetry-line,.vertical-label{display:none}.planet-card{top:19%;padding:22px}.planet-card h2{font-size:33px;margin:16px 0}.planet-facts{margin-top:14px}.planet-fact{padding:9px 0}.text-button{margin-top:17px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;scroll-behavior:auto!important}}
+
+/* Solar-system scale and satellite navigation. */
+.scale-tools{position:absolute;left:50%;top:185px;z-index:2;display:flex;gap:8px}
+.scale-tools button{border:1px solid var(--line);border-radius:4px;background:#101a16b3;backdrop-filter:blur(12px);padding:9px 12px;font-size:9px;color:#b6c2b4}
+.scale-tools button:hover{border-color:#e6b48b80;color:var(--accent)}
+.scale-tools button[aria-pressed=true]{border-color:#acbc9b44}
+.planet-picker{max-width:calc(100% - 50px)}
+.planet-card{max-height:calc(100dvh - 300px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:#52624f transparent}
+.moon-panel{margin-top:20px}
+.moon-panel>span{font:8px 'Space Grotesk',monospace;letter-spacing:1.4px;color:var(--accent)}
+#moon-buttons{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;max-height:110px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#52624f transparent}
+.moon-button{font-size:9px;background:#b3c2a60a;border:1px solid var(--line);border-radius:4px;padding:7px 9px;color:#abb9a5}
+.moon-button:hover,.moon-button[aria-pressed=true]{color:var(--accent);border-color:#e6b48b70}
+#parent-button{margin-top:14px}
+dialog a{color:#c6b297;text-underline-offset:3px}
+.scene-coordinate{max-width:43%;font-size:7px;letter-spacing:1.1px}
+@media(max-width:1100px){.scale-tools{top:155px}.planet-button{padding:10px 9px}.planet-card{max-height:calc(100dvh - 255px)}}
+@media(max-width:760px){.scale-tools{left:7%;right:7%;top:auto;bottom:218px;gap:7px}.scale-tools button{font-size:8px;flex:1;padding:8px 5px}.planet-buttons{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px}.planet-button{padding:7px 4px;min-width:0;gap:5px}.planet-picker{bottom:105px}.picker-caption{margin-bottom:8px}.planet-card{max-height:35dvh;width:270px}.scene-coordinate{max-width:75%;font-size:5px;letter-spacing:.3px}.moon-panel{margin-top:16px}#moon-buttons{max-height:95px}.moon-button{font-size:8px;padding:6px 7px}.toast{bottom:254px;font-size:9px}}
+@media(max-height:650px) and (min-width:761px){.scale-tools{top:133px}.planet-card{top:18%;max-height:calc(100dvh - 220px)}.scene-coordinate{top:96px}.planet-picker{bottom:90px}.telemetry{top:35%}.telemetry-item{margin-top:10px}}

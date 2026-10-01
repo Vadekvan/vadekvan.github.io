@@ -4,6 +4,8 @@
   const ctx = canvas.getContext('2d', { alpha: false });
   const $ = (id) => document.getElementById(id);
   const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const compactLayout = window.matchMedia('(max-width:760px), (max-width:1000px) and (max-height:600px)');
+  let sceneRect = null;
   let reducedMotion = motionPreference.matches;
   let paused = motionPreference.matches;
   let showOrbits = true;
@@ -187,9 +189,33 @@
   function resize() {
     width = window.innerWidth; height = window.innerHeight; dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    positionCache.clear();
-    if (showMoons && selected?.moons?.length) targetZoom = Math.min(targetZoom, systemZoom(selected));
+    refreshSceneLayout();
+    if (selected) fitSelectedBody();
     makeBackground();
+  }
+  function refreshSceneLayout() {
+    sceneRect = null;
+    if (compactLayout.matches) {
+      const landscape = width > height && height <= 600;
+      const clock = document.querySelector('.time-tools').getBoundingClientRect();
+      const dock = document.querySelector('.scale-tools').getBoundingClientRect();
+      const card = $('planet-card').getBoundingClientRect();
+      const intro = document.querySelector('.intro').getBoundingClientRect();
+      const header = document.querySelector('.header').getBoundingClientRect();
+      const left = landscape ? clock.right + 20 : Math.max(16, header.left), right = Math.min(width - 16, header.right);
+      const top = landscape ? document.querySelector('.header').getBoundingClientRect().bottom + 14 : Math.max(clock.bottom + 14, selected ? 0 : intro.bottom + 18);
+      const bottom = landscape ? document.querySelector('.planet-picker').getBoundingClientRect().top - 16 : (selected ? card.top : dock.top) - 14;
+      sceneRect = { left, right, top, bottom: Math.max(top + 48, bottom), tight: bottom - top < 110 };
+    }
+    positionCache.clear(); trackedPosition = null;
+  }
+  function fitSelectedBody() {
+    if (!selected) return;
+    let radius = selected === sun ? Math.min(width * .24, height * .23) : selected.moons?.length ? Math.min(width * (compactLayout.matches ? .12 : .055), height * .08) : Math.min(width * .19, height * .15);
+    if (sceneRect) radius = Math.min(radius, (sceneRect.right - sceneRect.left) * .23, (sceneRect.bottom - sceneRect.top) * .27);
+    targetZoom = clamp(radius / basePosition(selected).r, MIN_ZOOM, MAX_ZOOM);
+    if (showMoons && selected.moons?.length) targetZoom = Math.min(targetZoom, systemZoom(selected));
+    trackedPosition = basePosition(selected);
   }
   function projectVector(vector, body) {
     // Fixed oblique view of the J2000 ecliptic. Keep real 3D orientations,
@@ -230,7 +256,7 @@
     const orbit = orbitalPoint(orbitRadius(body), angle, body.eccentricity);
     return { ...orbit, r };
   }
-  function layoutScale() { return width <= 760 ? Math.min(width * .31, height * .22) : Math.min(width * .255, height * .36); }
+  function layoutScale() { return sceneRect ? Math.min((sceneRect.right - sceneRect.left) * .31, (sceneRect.bottom - sceneRect.top) * .45) : Math.min(width * .255, height * .36); }
   function sunRadius() { return layoutScale() * .4; }
   function orbitRadius(body) { return trueDistances ? body.au * data.auKm * sunRadius() * 2 / data.sunDiameterKm : layoutScale() * [.56, .64, .72, .82, 1, 1.1, 1.22, 1.35][body.index]; }
   function orbitalPoint(radius, angle, eccentricity = 0, rotation = -.2) {
@@ -239,8 +265,7 @@
     return { x: x * Math.cos(rotation) - y * Math.sin(rotation), y: x * Math.sin(rotation) + y * Math.cos(rotation), z: Math.sin(angle) * radial * Math.sqrt(1 - .72 ** 2) };
   }
   function anchor() {
-    const denseSystem = (selected?.parent || selected)?.moons?.length >= 6;
-    return { x: width * (width <= 760 ? selected ? denseSystem ? .5 : .73 : .54 : .67), y: height * (width <= 760 ? selected ? .59 : .565 : .475) };
+    return sceneRect ? { x: (sceneRect.left + sceneRect.right) / 2, y: (sceneRect.top + sceneRect.bottom) / 2 } : { x: width * .67, y: height * .475 };
   }
   function position(body) {
     const base = basePosition(body);
@@ -374,14 +399,14 @@
     if (denseSystem) {
       // Packed satellite orbits need independent text placement, especially
       // when distant irregular moons make the inner system smaller than a pixel.
-      const mobile = width <= 760, top = mobile ? height * .49 + 17 : Math.max(112, document.querySelector('.time-tools').getBoundingClientRect().bottom + 20);
-      const bottom = height - (mobile ? 260 : 200);
+      const mobile = Boolean(sceneRect), top = mobile ? sceneRect.top + 10 : Math.max(112, document.querySelector('.time-tools').getBoundingClientRect().bottom + 20);
+      const bottom = mobile ? sceneRect.bottom - 10 : height - 200;
       const sorted = [...parent.moons].sort((a, b) => a.screen.x - b.screen.x);
       const rows = Math.ceil(sorted.length / 2), pitch = Math.min(18, (bottom - top - 8) / Math.max(1, rows - 1));
       const start = clamp(anchor().y - (rows - 1) * pitch / 2, top + 4, bottom - (rows - 1) * pitch - 4);
       for (let column = 0; column < 2; column++) {
         const group = sorted.slice(column * rows, (column + 1) * rows).sort((a, b) => a.screen.y - b.screen.y);
-        group.forEach((moon, index) => columnLabels.set(moon.id, { x: mobile ? column ? width / 2 + 12 : 24 : column ? anchor().x + 100 : width * .43,
+        group.forEach((moon, index) => columnLabels.set(moon.id, { x: mobile ? column ? anchor().x + 12 : sceneRect.left + 8 : column ? anchor().x + 100 : width * .43,
           y: start + index * pitch, left: column === 0, hitHeight: Math.min(14, pitch - 1) }));
       }
     }
@@ -389,20 +414,21 @@
       body.labelRect = null; body.locatorVisible = false;
       const moonInFocus = focusedMoon(body);
       if (body.parentId && !moonInFocus) continue;
+      if (sceneRect?.tight && selected && body !== selected) continue;
       if (denseSystem && body === parent) continue;
       const p = body.screen;
-      if (!p || p.x < 18 || p.x > width - 18 || p.y < 100 || p.y > height - 185) continue;
+      if (!p || p.x < (sceneRect?.left || 18) || p.x > (sceneRect?.right || width - 18) || p.y < (sceneRect?.top || 100) || p.y > (sceneRect?.bottom || height - 185)) continue;
       if (trueDistances && !selected && body !== sun && Math.hypot(p.x - sun.screen.x, p.y - sun.screen.y) < 30) continue;
       const coveredBy = occluder(body);
       if (coveredBy && !moonInFocus) continue;
       const label = body.name.toLocaleUpperCase('cs') + (coveredBy ? coveredBy === sun ? ' · ZA SLUNCEM' : ' · ZA PLANETOU' : '');
-      ctx.font = `${width <= 760 ? 8 : 9}px "Space Grotesk", sans-serif`;
+      ctx.font = '9px "Space Grotesk", sans-serif';
       const textWidth = ctx.measureText(label).width;
       const columnLabel = columnLabels.get(body.id);
       const leftSide = columnLabel ? columnLabel.left : p.x + p.r + textWidth + 15 > width - 14;
       const labelX = clamp(columnLabel ? columnLabel.x : leftSide ? p.x - p.r - textWidth - 15 : p.x + p.r + 15, 12, width - textWidth - 12);
-      const labelTop = moonInFocus && width <= 760 ? height * .49 + 17 : 112;
-      const labelBottom = height - (moonInFocus && width <= 760 ? 260 : 190);
+      const labelTop = sceneRect ? sceneRect.top + 12 : 112;
+      const labelBottom = sceneRect ? sceneRect.bottom - 10 : height - 190;
       let labelY = columnLabel ? columnLabel.y : body === sun ? p.y + p.r + 22 : clamp(p.y + 3, labelTop, labelBottom);
       if (body !== sun && !columnLabel) for (let attempt = 0; attempt < 24; attempt++) {
         const candidateY = clamp(p.y + 3 + (attempt % 2 ? 1 : -1) * Math.ceil(attempt / 2) * 16, labelTop, labelBottom);
@@ -460,7 +486,7 @@
       let x = star.x * width + pointer.smoothX * star.depth * 14, y = star.y * height + pointer.smoothY * star.depth * 11;
       const alpha = star.brightness * (.78 + Math.sin(effectsTime + star.phase) * .22);
       ctx.fillStyle = star.warm ? `rgba(218,194,153,${alpha})` : `rgba(199,214,206,${alpha})`;
-      ctx.beginPath(); ctx.arc(x, y, star.radius * (width <= 760 ? .7 : 1), 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x, y, star.radius * (compactLayout.matches ? .7 : 1), 0, Math.PI * 2); ctx.fill();
       if (star.radius > 1.45 && star.brightness > .7) { ctx.strokeStyle = `rgba(219,230,211,${alpha * .26})`; ctx.lineWidth = .5; ctx.beginPath(); ctx.moveTo(x - 3, y); ctx.lineTo(x + 3, y); ctx.moveTo(x, y - 3); ctx.lineTo(x, y + 3); ctx.stroke(); }
     }
     drawOrbits();
@@ -514,10 +540,8 @@
     }
   }
   function selectBody(body) {
-    selected = body; hovered = null; trackedPosition = basePosition(body);
-    const targetRadius = body === sun ? Math.min(width * .24, height * .23) : body.moons?.length ? Math.min(width * (width <= 760 ? .12 : .055), height * .08) : Math.min(width * .19, height * .15);
-    targetZoom = clamp(targetRadius / basePosition(body).r, MIN_ZOOM, MAX_ZOOM);
-    if (showMoons && body.moons?.length) targetZoom = Math.min(targetZoom, systemZoom(body));
+    selected = body; hovered = null;
+    $('planet-card-content').scrollTop = 0;
     $('planet-card').hidden = false; document.querySelector('.intro').classList.add('focused'); $('planet-label').hidden = true;
     $('planet-card-title').textContent = body.name; $('planet-card-kicker').textContent = body.kind; $('planet-card-description').textContent = body.description;
     $('planet-facts').replaceChildren(...body.facts.map(([label, value]) => { const row = document.createElement('div'); row.className = 'planet-fact'; const title = document.createElement('span'); title.textContent = label; const content = document.createElement('strong'); content.textContent = value; row.append(title, content); return row; }));
@@ -530,6 +554,11 @@
     $('parent-button').hidden = !body.parent; $('parent-button').textContent = body.parent ? `← ${body.parent.name} a její měsíce` : '';
     $('scale-note').textContent = trueDistances ? 'PRŮMĚRY I VZDÁLENOSTI V MĚŘÍTKU' : body === sun ? 'PRŮMĚRY V MĚŘÍTKU · DRÁHY ZKRÁCENÉ' : 'DETAIL TĚLESA · PRŮMĚRY V MĚŘÍTKU';
     document.querySelectorAll('.planet-button').forEach((button) => { const active = button.dataset.planet === parent.id; button.classList.toggle('selected', active); button.setAttribute('aria-pressed', String(active)); });
+    refreshSceneLayout(); fitSelectedBody();
+    if (compactLayout.matches) {
+      const picker = $('planet-buttons'), button = picker.querySelector(`[data-planet="${parent.id}"]`);
+      if (button) picker.scrollTo({ left: button.offsetLeft - (picker.clientWidth - button.offsetWidth) / 2, behavior: motionPreference.matches ? 'instant' : 'smooth' });
+    }
   }
   function systemZoom(parent) {
     // Fit the entire projected satellite system, including subpixel moons,
@@ -545,14 +574,21 @@
         extent.top = Math.max(extent.top, -p.y); extent.bottom = Math.max(extent.bottom, p.y);
       }
     }
-    const center = anchor(), mobile = width <= 760;
-    const left = mobile ? 18 : width * .4, right = width - 24;
-    const top = mobile ? height * .49 + 14 : Math.max(110, document.querySelector('.time-tools').getBoundingClientRect().bottom + 16);
-    const bottom = height - (mobile ? 260 : 200);
+    const center = anchor();
+    const left = sceneRect ? sceneRect.left : width * .4, right = sceneRect ? sceneRect.right : width - 24;
+    const top = sceneRect ? sceneRect.top : Math.max(110, document.querySelector('.time-tools').getBoundingClientRect().bottom + 16);
+    const bottom = sceneRect ? sceneRect.bottom : height - 200;
     return clamp(Math.min(Math.max(32, center.x - left - 15) / extent.left, Math.max(32, right - center.x - 15) / extent.right,
       Math.max(32, center.y - top - 15) / extent.top, Math.max(32, bottom - center.y - 15) / extent.bottom), MIN_ZOOM, MAX_ZOOM);
   }
-  function reset() { selected = hovered = null; trackedPosition = null; $('planet-label').hidden = true; targetZoom = trueDistances ? Math.min(width * .31, height * .3) / orbitRadius(planets[7]) : 1; $('planet-card').hidden = true; document.querySelector('.intro').classList.remove('focused'); $('scale-note').textContent = trueDistances ? 'PRŮMĚRY I VZDÁLENOSTI V MĚŘÍTKU' : 'PRŮMĚRY V MĚŘÍTKU · DRÁHY ZKRÁCENÉ'; document.querySelectorAll('.planet-button').forEach((button) => { button.classList.remove('selected'); button.setAttribute('aria-pressed', 'false'); }); }
+  function reset() {
+    selected = hovered = null; trackedPosition = null; $('planet-label').hidden = true;
+    $('planet-card').hidden = true; document.querySelector('.intro').classList.remove('focused');
+    $('scale-note').textContent = trueDistances ? 'PRŮMĚRY I VZDÁLENOSTI V MĚŘÍTKU' : 'PRŮMĚRY V MĚŘÍTKU · DRÁHY ZKRÁCENÉ';
+    document.querySelectorAll('.planet-button').forEach(button => { button.classList.remove('selected'); button.setAttribute('aria-pressed', 'false'); });
+    setDetailExpanded(false);
+    targetZoom = trueDistances ? Math.min(width * .31, height * .3) / orbitRadius(planets[7]) : 1;
+  }
   for (const body of [sun, ...planets]) { const button = document.createElement('button'); button.className = 'planet-button'; button.dataset.planet = body.id; button.dataset.diameterKm = body.diameterKm; button.setAttribute('aria-pressed', 'false'); const dot = document.createElement('span'); dot.className = 'planet-swatch'; dot.style.setProperty('--planet-color', body.color); dot.setAttribute('aria-hidden', 'true'); button.append(dot, document.createTextNode(body.name)); button.addEventListener('click', () => selectBody(body)); $('planet-buttons').append(button); }
   canvas.addEventListener('pointermove', pointerMove);
   canvas.addEventListener('pointerleave', () => { pointer.x = pointer.y = 0; pointer.active = false; hovered = null; $('planet-label').hidden = true; });
@@ -573,6 +609,14 @@
   $('moon-toggle').addEventListener('click', () => { showMoons = !showMoons; $('moon-toggle').setAttribute('aria-pressed', String(showMoons)); $('moon-toggle').textContent = showMoons ? 'Měsíce viditelné' : 'Měsíce skryté'; hovered = null; $('planet-label').hidden = true; if (!showMoons && selected?.parent) selectBody(selected.parent); if (showMoons && selected?.moons?.length) targetZoom = Math.min(targetZoom, systemZoom(selected)); });
   $('distance-toggle').addEventListener('click', () => { trueDistances = !trueDistances; positionCache.clear(); $('distance-toggle').setAttribute('aria-pressed', String(trueDistances)); $('distance-toggle').textContent = trueDistances ? 'Skutečné vzdálenosti' : 'Přehledné vzdálenosti'; cameraX = cameraY = 0; zoom = trueDistances ? Math.min(width * .31, height * .3) / orbitRadius(planets[7]) : 1; reset(); notify(trueDistances ? 'Ve skutečném měřítku jsou planety drobné. Vyber je v seznamu.' : 'Dráhy jsou zkrácené. Poměry velikostí zůstávají skutečné.'); });
   for (const id of ['home-button', 'close-card', 'return-button', 'reset-button']) $(id).addEventListener('click', reset);
+  function setDetailExpanded(expanded) {
+    $('planet-card').dataset.expanded = String(expanded);
+    $('detail-toggle').setAttribute('aria-expanded', String(expanded));
+    $('detail-toggle').setAttribute('aria-label', expanded ? 'Skrýt informace a měsíce' : 'Zobrazit informace a měsíce');
+    refreshSceneLayout(); if (selected) fitSelectedBody();
+  }
+  $('detail-toggle').addEventListener('click', () => setDetailExpanded($('planet-card').dataset.expanded !== 'true'));
+  if (document.fonts) document.fonts.ready.then(() => { refreshSceneLayout(); if (selected) fitSelectedBody(); });
   function syncSpeed() {
     const speed = speedOptions[speedIndex];
     const label = `${speed.value} ${speed.unit}`;

@@ -2,7 +2,7 @@
 <html lang="cs">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#070c0d">
     <meta name="description" content="Malá interaktivní observatoř. Objevujte planety, prolétněte mezi hvězdami a rozhýbejte vesmír pohybem myši.">
     <title>ASTRA — Vesmír na dosah</title>
@@ -29,7 +29,7 @@
         <div class="eyebrow"><span class="tiny-line"></span> TVOJE OSOBNÍ OBSERVATOŘ</div>
         <h1 id="main-title">Vesmír.<br>Na <span>dosah.</span></h1>
         <p>Na chvíli se ztrať mezi hvězdami.<br>Objevuj planety. Rozhýbej nekonečno.</p>
-        <button class="explore-button" id="explore-button">Vyrazit na oběžnou dráhu <span>↗</span></button>
+        <button class="explore-button" id="explore-button" aria-label="Vyrazit na oběžnou dráhu"><span class="explore-text">Vyrazit na oběžnou dráhu</span><span aria-hidden="true">↗</span></button>
         <div class="mouse-hint"><svg viewBox="0 0 20 25" aria-hidden="true"><rect x="4" y="1" width="12" height="20" rx="6"/><path d="M10 5v4M7 24h6"/></svg><span>POHNI MYŠÍ. VESMÍR TĚ SLEDUJE.</span></div>
       </section>
       <div class="scene-coordinate"><span>SLUNEČNÍ SOUSTAVA</span><span id="scale-note">PRŮMĚRY V MĚŘÍTKU · DRÁHY ZKRÁCENÉ</span></div>
@@ -40,8 +40,11 @@
       </div>
       <aside class="telemetry" aria-label="Informace o scéně"><span class="telemetry-label">SIMULACE SOUSTAVY</span><div class="telemetry-item"><span class="telemetry-number" id="star-count">1 200</span><span>HVĚZD KOLEM TEBE</span></div><div class="telemetry-item"><span class="telemetry-number">08</span><span>PLANET · 41 MĚSÍCŮ V MODELU</span></div><div class="telemetry-item"><span class="telemetry-number" id="speed-label">2<span>d/s</span></span><span>SIMULAČNÍ ČAS ZA SEKUNDU</span></div><span class="telemetry-line"></span><span class="vertical-label">NEKONEČNO ZAČÍNÁ TADY</span></aside>
       <div class="planet-label" id="planet-label" hidden><span id="planet-hover-name">ZEMĚ</span><span class="planet-label-action">KLIKNI A OBJEVUJ ↗</span></div>
-      <section class="planet-picker" aria-label="Výběr planety"><div class="picker-caption"><span class="live-dot"></span> VYBER SI SVŮJ SVĚT <span class="picker-line"></span></div><div class="planet-buttons" id="planet-buttons"></div></section>
-      <aside class="planet-card" id="planet-card" hidden aria-labelledby="planet-card-title"><button class="close-button" id="close-card" aria-label="Zavřít detail tělesa">×</button><span class="eyebrow" id="planet-card-kicker"></span><h2 id="planet-card-title"></h2><p id="planet-card-description"></p><div class="planet-facts" id="planet-facts"></div><div class="moon-panel" id="moon-panel"><span id="moon-panel-title"></span><div id="moon-buttons"></div><button class="text-button" id="parent-button" hidden></button></div><button class="text-button" id="return-button">← Zpět do observatoře</button></aside>
+      <section class="planet-picker" aria-label="Výběr planety"><div class="picker-caption"><span class="live-dot"></span> VYBER SI SVŮJ SVĚT <span class="picker-line"></span><span class="mobile-picker-hint">POSUŇ ↔</span></div><div class="planet-buttons" id="planet-buttons"></div></section>
+      <aside class="planet-card" id="planet-card" hidden data-expanded="false" aria-labelledby="planet-card-title">
+        <div class="planet-card-heading"><button class="close-button" id="close-card" aria-label="Zavřít detail tělesa">×</button><span class="eyebrow" id="planet-card-kicker"></span><h2 id="planet-card-title"></h2><button id="detail-toggle" class="detail-toggle" aria-expanded="false" aria-controls="planet-card-content" aria-label="Zobrazit informace a měsíce">Detail <span aria-hidden="true">⌃</span></button></div>
+        <div id="planet-card-content" class="planet-card-content"><p id="planet-card-description"></p><div class="planet-facts" id="planet-facts"></div><div class="moon-panel" id="moon-panel"><span id="moon-panel-title"></span><div id="moon-buttons"></div><button class="text-button" id="parent-button" hidden></button></div><button class="text-button" id="return-button">← Zpět do observatoře</button></div>
+      </aside>
     </main>
     <footer class="footer">
       <div class="footer-note"><span class="asterisk">✳</span><span>MALÁ PERSPEKTIVA.<br><strong>VELKÝ VESMÍR.</strong></span></div>
@@ -50,7 +53,7 @@
         <span class="control-divider"></span>
         <button id="speed-button" popovertarget="speed-panel" aria-controls="speed-panel" aria-expanded="false" aria-label="Změnit rychlost simulace"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="M10 5v5l3 2"/></svg><span id="speed-button-value">2 d/s</span><small aria-hidden="true">⌃</small></button>
         <span class="control-divider"></span>
-        <button id="orbit-button" aria-pressed="true"><svg viewBox="0 0 20 20" aria-hidden="true"><ellipse cx="10" cy="10" rx="8" ry="4" transform="rotate(-35 10 10)"/><circle cx="10" cy="10" r="2"/></svg><span>Orbity</span></button>
+        <button id="orbit-button" aria-label="Zobrazení oběžných drah" aria-pressed="true"><svg viewBox="0 0 20 20" aria-hidden="true"><ellipse cx="10" cy="10" rx="8" ry="4" transform="rotate(-35 10 10)"/><circle cx="10" cy="10" r="2"/></svg><span>Orbity</span></button>
         <span class="control-divider"></span>
         <button id="sound-button" aria-label="Zapnout zvuk" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m9 4-4 4H2v4h3l4 4V4ZM13 7c2 2 2 4 0 6M16 4c4 4 4 8 0 12"/></svg><span>Zvuk vypnutý</span></button>
         <span class="control-divider"></span>

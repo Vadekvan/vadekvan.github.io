@@ -12,6 +12,7 @@ Otevři `index.html` v moderním prohlížeči, nebo v této složce spusť vlas
 - Kliknutí do prázdné scény: roj meteorů.
 - Kliknutí na planetu nebo její tlačítko: přiblížení a informace.
 - Tlačítka měsíců v detailu planety: přiblížení jednotlivých měsíců, návrat k jejich planetě.
+- Na telefonu přejížděj seznam planet vodorovně. Vybraná planeta se posune do viditelné části seznamu. Tlačítko **Detail** rozbalí popis, údaje a výběr měsíců; jeho obsah lze posouvat a opět sbalit bez změny vybraného tělesa.
 - V detailu planety mají i nejmenší měsíce klikací popisky a značky polohy. Kroužek a bod jsou orientační značky v pixelech, průměr samotného tělesa zůstává ve skutečném měřítku. Zakrytý měsíc má přerušovanou značku a text „za planetou“ nebo „za Sluncem“.
 - Početné soustavy Jupiteru, Saturnu a Neptunu mají popisky ve dvou sloupcích spojené čarami s pozicemi měsíců, aby se neprolínaly ani při skutečných vzdálenostech. Kliknutí na text má přednost před značkou jiného tělesa pod ním.
 - Při výběru planety se kamera přizpůsobí rozsahu drah jejích měsíců, aby se celá soustava vešla vedle informací a ovládání. Platí i pro skutečné vzdálenosti; na mobilu je panel času nad detailem.
@@ -26,7 +27,7 @@ Otevři `index.html` v moderním prohlížeči, nebo v této složce spusť vlas
 - Pauza si zvolenou rychlost zapamatuje. Změna rychlosti během pauzy animaci nespustí; po spuštění pokračuje novým tempem. Obnovení pohledu tempo nemění. Escape zavře panel rychlosti bez změny pohledu.
 - Escape: návrat do výchozího pohledu nebo zavření průvodce.
 
-Rozložení se přizpůsobuje mobilům. Planety a všechny ovládací prvky lze vybrat klávesnicí. Při systémové preferenci omezeného pohybu začíná animace pozastavená. Zvuk se spouští jen na vyžádání. Neaktivní karta pozastaví vykreslování i zvuk.
+Rozložení se přizpůsobuje mobilům, krátkým displejům i otočení telefonu na šířku. Dotykové ovládání má plochy nejméně 44 px, panely respektují výřezy displeje a kamera používá skutečný volný prostor mezi nimi. Planety a všechny ovládací prvky lze vybrat klávesnicí. Při systémové preferenci omezeného pohybu začíná animace pozastavená. Zvuk se spouští jen na vyžádání. Neaktivní karta pozastaví vykreslování i zvuk.
 
 Průměry těles vždy sdílejí skutečné lineární měřítko: Slunce má přibližně 109krát větší průměr než Země. Přehled zkracuje vzdálenosti planet i měsíců, aby šla soustava prozkoumat. Režim skutečných vzdáleností používá stejný převod kilometrů na pixely pro rozměry i dráhy; jednotlivá tělesa jsou proto v celkovém pohledu velmi drobná.
 

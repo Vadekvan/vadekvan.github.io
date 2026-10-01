@@ -187,7 +187,9 @@
   function resize() {
     width = window.innerWidth; height = window.innerHeight; dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    positionCache.clear(); makeBackground();
+    positionCache.clear();
+    if (showMoons && selected?.moons?.length) targetZoom = Math.min(targetZoom, systemZoom(selected));
+    makeBackground();
   }
   function projectVector(vector, body) {
     // Fixed oblique view of the J2000 ecliptic. Keep real 3D orientations,
@@ -236,7 +238,10 @@
     const x = Math.cos(angle) * radial, y = Math.sin(angle) * radial * .72;
     return { x: x * Math.cos(rotation) - y * Math.sin(rotation), y: x * Math.sin(rotation) + y * Math.cos(rotation), z: Math.sin(angle) * radial * Math.sqrt(1 - .72 ** 2) };
   }
-  function anchor() { return { x: width * (width <= 760 ? selected ? .73 : .54 : .67), y: height * (width <= 760 ? selected ? .635 : .565 : .475) }; }
+  function anchor() {
+    const denseSystem = (selected?.parent || selected)?.moons?.length >= 6;
+    return { x: width * (width <= 760 ? selected ? denseSystem ? .5 : .73 : .54 : .67), y: height * (width <= 760 ? selected ? .59 : .565 : .475) };
+  }
   function position(body) {
     const base = basePosition(body);
     const center = anchor();
@@ -349,33 +354,79 @@
     for (let i = ripples.length - 1; i >= 0; i--) { const ripple = ripples[i]; ripple.age += dt; if (ripple.age > 1.3) { ripples.splice(i, 1); continue; } ctx.beginPath(); ctx.arc(ripple.x, ripple.y, ripple.age * 75, 0, Math.PI * 2); ctx.strokeStyle = `rgba(230,180,139,${(1 - ripple.age / 1.3) * .3})`; ctx.lineWidth = .7; ctx.stroke(); }
   }
   let nextMeteor = 1.6;
+  function focusedMoon(body) {
+    return body.parentId && (showMoons || body === selected) && body.parent === (selected?.parent || selected);
+  }
+  function occluder(body) {
+    const p = body.screen;
+    if (!p) return null;
+    for (const other of [sun, body.parent]) {
+      if (!other || other === body || !other.screen) continue;
+      if (p.z < other.screen.z && Math.hypot(p.x - other.screen.x, p.y - other.screen.y) < other.screen.r) return other;
+    }
+    return null;
+  }
   function drawLabels() {
-    const focusParent = selected?.parent || selected;
     const occupiedLabels = [];
+    const parent = selected?.parent || selected;
+    const denseSystem = showMoons && selected === parent && parent?.moons?.length >= 6;
+    const columnLabels = new Map();
+    if (denseSystem) {
+      // Packed satellite orbits need independent text placement, especially
+      // when distant irregular moons make the inner system smaller than a pixel.
+      const mobile = width <= 760, top = mobile ? height * .49 + 17 : Math.max(112, document.querySelector('.time-tools').getBoundingClientRect().bottom + 20);
+      const bottom = height - (mobile ? 260 : 200);
+      const sorted = [...parent.moons].sort((a, b) => a.screen.x - b.screen.x);
+      const rows = Math.ceil(sorted.length / 2), pitch = Math.min(18, (bottom - top - 8) / Math.max(1, rows - 1));
+      const start = clamp(anchor().y - (rows - 1) * pitch / 2, top + 4, bottom - (rows - 1) * pitch - 4);
+      for (let column = 0; column < 2; column++) {
+        const group = sorted.slice(column * rows, (column + 1) * rows).sort((a, b) => a.screen.y - b.screen.y);
+        group.forEach((moon, index) => columnLabels.set(moon.id, { x: mobile ? column ? width / 2 + 12 : 24 : column ? anchor().x + 100 : width * .43,
+          y: start + index * pitch, left: column === 0, hitHeight: Math.min(14, pitch - 1) }));
+      }
+    }
     for (const body of bodies) {
-      body.labelRect = null;
-      if (body.parentId && (!showMoons || body.parent !== focusParent || (body.diameterKm < 300 && body !== selected && body !== hovered))) continue;
+      body.labelRect = null; body.locatorVisible = false;
+      const moonInFocus = focusedMoon(body);
+      if (body.parentId && !moonInFocus) continue;
+      if (denseSystem && body === parent) continue;
       const p = body.screen;
       if (!p || p.x < 18 || p.x > width - 18 || p.y < 100 || p.y > height - 185) continue;
-      if (body.parentId && p.r < .45) continue;
       if (trueDistances && !selected && body !== sun && Math.hypot(p.x - sun.screen.x, p.y - sun.screen.y) < 30) continue;
-      if (body !== sun && p.z < 0 && Math.hypot(p.x - sun.screen.x, p.y - sun.screen.y) < sun.screen.r) continue;
-      const label = body.name.toLocaleUpperCase('cs');
+      const coveredBy = occluder(body);
+      if (coveredBy && !moonInFocus) continue;
+      const label = body.name.toLocaleUpperCase('cs') + (coveredBy ? coveredBy === sun ? ' · ZA SLUNCEM' : ' · ZA PLANETOU' : '');
       ctx.font = `${width <= 760 ? 8 : 9}px "Space Grotesk", sans-serif`;
       const textWidth = ctx.measureText(label).width;
-      const leftSide = p.x + p.r + textWidth + 15 > width - 14;
-      const labelX = clamp(leftSide ? p.x - p.r - textWidth - 15 : p.x + p.r + 15, 12, width - textWidth - 12);
-      let labelY = body === sun ? p.y + p.r + 22 : p.y + 3;
-      if (body !== sun) for (let attempt = 0; attempt < 4; attempt++) {
-        if (!occupiedLabels.some(rect => labelX < rect.x + rect.w + 3 && labelX + textWidth > rect.x - 3 && labelY > rect.y - 12 && labelY < rect.y + 12)) break;
-        labelY += 14;
+      const columnLabel = columnLabels.get(body.id);
+      const leftSide = columnLabel ? columnLabel.left : p.x + p.r + textWidth + 15 > width - 14;
+      const labelX = clamp(columnLabel ? columnLabel.x : leftSide ? p.x - p.r - textWidth - 15 : p.x + p.r + 15, 12, width - textWidth - 12);
+      const labelTop = moonInFocus && width <= 760 ? height * .49 + 17 : 112;
+      const labelBottom = height - (moonInFocus && width <= 760 ? 260 : 190);
+      let labelY = columnLabel ? columnLabel.y : body === sun ? p.y + p.r + 22 : clamp(p.y + 3, labelTop, labelBottom);
+      if (body !== sun && !columnLabel) for (let attempt = 0; attempt < 24; attempt++) {
+        const candidateY = clamp(p.y + 3 + (attempt % 2 ? 1 : -1) * Math.ceil(attempt / 2) * 16, labelTop, labelBottom);
+        if (!occupiedLabels.some(rect => labelX < rect.x + rect.w + 3 && labelX + textWidth > rect.x - 3 && candidateY > rect.y - 12 && candidateY < rect.y + 12)) { labelY = candidateY; break; }
       }
       ctx.fillStyle = body === selected || body === hovered ? '#efc49e' : '#bdc6b9';
       if (body === sun) { const text = label + ' · 109× ZEMĚ'; ctx.textAlign = 'center'; ctx.fillText(text, p.x, labelY); ctx.textAlign = 'left'; occupiedLabels.push({ x: p.x - ctx.measureText(text).width / 2, y: labelY, w: ctx.measureText(text).width }); }
       else {
-        if (p.r < 5) { ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI * 2); ctx.strokeStyle = '#c0c8b943'; ctx.lineWidth = .6; ctx.stroke(); }
+        if (p.r < 5 || coveredBy) {
+          // This is a screen-space locator, not an enlarged physical moon.
+          body.locatorVisible = Boolean(moonInFocus);
+          ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+          ctx.strokeStyle = moonInFocus ? '#e6b48bc0' : '#c0c8b943'; ctx.lineWidth = moonInFocus ? .9 : .6;
+          if (coveredBy) ctx.setLineDash([2, 3]); ctx.stroke(); ctx.setLineDash([]);
+          if (moonInFocus && !coveredBy && p.r < 1.5) { ctx.beginPath(); ctx.arc(p.x, p.y, 1.5, 0, Math.PI * 2); ctx.fillStyle = '#e6c39b'; ctx.fill(); }
+        }
+        if (moonInFocus) {
+          ctx.beginPath(); ctx.moveTo(p.x + (leftSide ? -7 : 7), p.y);
+          ctx.lineTo(leftSide ? labelX + textWidth + 4 : labelX - 4, labelY - 3);
+          ctx.strokeStyle = '#b6c6a768'; ctx.lineWidth = .6; ctx.stroke();
+          ctx.fillStyle = body === selected || body === hovered ? '#efc49e' : '#d2dcca';
+        }
         ctx.fillText(label, labelX, labelY);
-        body.labelRect = { x: labelX - 4, y: labelY - 13, w: textWidth + 8, h: 23 };
+        body.labelRect = { x: labelX - 4, y: labelY - (columnLabel ? 10 : 13), w: textWidth + 8, h: columnLabel ? columnLabel.hitHeight : 23 };
         occupiedLabels.push({ x: labelX, y: labelY, w: textWidth });
       }
     }
@@ -429,18 +480,28 @@
   function notify(message) { $('toast').textContent = message; $('toast').classList.add('visible'); clearTimeout(toastTimeout); toastTimeout = setTimeout(() => $('toast').classList.remove('visible'), 2600); }
   function updateHoverLabel(body) { const p = body.screen; const label = $('planet-label'); label.hidden = selected === body; $('planet-hover-name').textContent = body.name.toLocaleUpperCase('cs'); label.style.left = `${clamp(p.x + p.r + 20, 12, width - 165)}px`; label.style.top = `${clamp(p.y - 18, 85, height - 200)}px`; }
   function findBody(x, y) {
-    const parent = selected?.parent || selected;
     const candidates = bodies.filter(body => {
       const p = body.screen;
-      if (!p || (body.parentId && (p.r < .05 || !showMoons || body.parent !== parent))) return false;
-      if (body !== sun && p.z < 0 && Math.hypot(p.x - sun.screen.x, p.y - sun.screen.y) < sun.screen.r) return false;
+      if (!p || (body.parentId && (!focusedMoon(body) || (p.r < .05 && !body.locatorVisible)))) return false;
+      if (occluder(body) && !body.locatorVisible) return false;
       return p.x + p.r >= 0 && p.x - p.r <= width && p.y + p.r >= 0 && p.y - p.r <= height;
     });
+    // Overlay locators remain selectable even for a moon behind its planet.
+    // Labels sit above position markers; choose the clicked text rather than
+    // a different moon whose marker happens to lie underneath that text.
+    const labelHit = candidates.filter(body => {
+      const rect = body.labelRect;
+      return body.parentId && rect && x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
+    }).sort((a, b) => Math.hypot(x - a.labelRect.x - a.labelRect.w / 2, y - a.labelRect.y - a.labelRect.h / 2) - Math.hypot(x - b.labelRect.x - b.labelRect.w / 2, y - b.labelRect.y - b.labelRect.h / 2))[0];
+    if (labelHit) return labelHit;
+    const locatorHit = candidates.filter(body => body.parentId && body.locatorVisible && Math.hypot(x - body.screen.x, y - body.screen.y) <= 9)
+      .sort((a, b) => Math.hypot(x - a.screen.x, y - a.screen.y) - Math.hypot(x - b.screen.x, y - b.screen.y))[0];
+    if (locatorHit) return locatorHit;
     const actualHit = candidates.filter(body => Math.hypot(x - body.screen.x, y - body.screen.y) <= body.screen.r).sort((a, b) => b.screen.z - a.screen.z)[0];
     if (actualHit) return actualHit;
     return candidates.filter(body => {
       const p = body.screen, rect = body.labelRect;
-      return (!body.parentId || p.r >= .45) && (Math.hypot(x - p.x, y - p.y) < Math.max(p.r, 12) || (rect && x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h));
+      return Math.hypot(x - p.x, y - p.y) < Math.max(p.r, 12) || (rect && x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h);
     }).sort((a, b) => Math.hypot(x - a.screen.x, y - a.screen.y) - Math.hypot(x - b.screen.x, y - b.screen.y))[0];
   }
   function pointerMove(event) {
@@ -453,9 +514,10 @@
     }
   }
   function selectBody(body) {
-    selected = body; trackedPosition = basePosition(body);
+    selected = body; hovered = null; trackedPosition = basePosition(body);
     const targetRadius = body === sun ? Math.min(width * .24, height * .23) : body.moons?.length ? Math.min(width * (width <= 760 ? .12 : .055), height * .08) : Math.min(width * .19, height * .15);
     targetZoom = clamp(targetRadius / basePosition(body).r, MIN_ZOOM, MAX_ZOOM);
+    if (showMoons && body.moons?.length) targetZoom = Math.min(targetZoom, systemZoom(body));
     $('planet-card').hidden = false; document.querySelector('.intro').classList.add('focused'); $('planet-label').hidden = true;
     $('planet-card-title').textContent = body.name; $('planet-card-kicker').textContent = body.kind; $('planet-card-description').textContent = body.description;
     $('planet-facts').replaceChildren(...body.facts.map(([label, value]) => { const row = document.createElement('div'); row.className = 'planet-fact'; const title = document.createElement('span'); title.textContent = label; const content = document.createElement('strong'); content.textContent = value; row.append(title, content); return row; }));
@@ -469,7 +531,28 @@
     $('scale-note').textContent = trueDistances ? 'PRŮMĚRY I VZDÁLENOSTI V MĚŘÍTKU' : body === sun ? 'PRŮMĚRY V MĚŘÍTKU · DRÁHY ZKRÁCENÉ' : 'DETAIL TĚLESA · PRŮMĚRY V MĚŘÍTKU';
     document.querySelectorAll('.planet-button').forEach((button) => { const active = button.dataset.planet === parent.id; button.classList.toggle('selected', active); button.setAttribute('aria-pressed', String(active)); });
   }
-  function reset() { selected = null; trackedPosition = null; targetZoom = trueDistances ? Math.min(width * .31, height * .3) / orbitRadius(planets[7]) : 1; $('planet-card').hidden = true; document.querySelector('.intro').classList.remove('focused'); $('scale-note').textContent = trueDistances ? 'PRŮMĚRY I VZDÁLENOSTI V MĚŘÍTKU' : 'PRŮMĚRY V MĚŘÍTKU · DRÁHY ZKRÁCENÉ'; document.querySelectorAll('.planet-button').forEach((button) => { button.classList.remove('selected'); button.setAttribute('aria-pressed', 'false'); }); }
+  function systemZoom(parent) {
+    // Fit the entire projected satellite system, including subpixel moons,
+    // into the part of the scene free of the detail card and controls.
+    const extent = { left: basePosition(parent).r, right: basePosition(parent).r, top: basePosition(parent).r, bottom: basePosition(parent).r };
+    const jd = ephemerides ? simulationJd() : 0;
+    for (const moon of parent.moons) {
+      const row = ephemerides ? ephemeris.elements(ephemerides, moon.id, jd) : null;
+      for (let i = 0; i < 64; i++) {
+        const angle = i / 64 * Math.PI * 2;
+        const p = row ? projectVector(ephemeris.propagate(row, jd, angle), moon) : orbitalPoint(satelliteRadius(moon), angle, 0, parent.id === 'uranus' ? 1.05 : -.28);
+        extent.left = Math.max(extent.left, -p.x); extent.right = Math.max(extent.right, p.x);
+        extent.top = Math.max(extent.top, -p.y); extent.bottom = Math.max(extent.bottom, p.y);
+      }
+    }
+    const center = anchor(), mobile = width <= 760;
+    const left = mobile ? 18 : width * .4, right = width - 24;
+    const top = mobile ? height * .49 + 14 : Math.max(110, document.querySelector('.time-tools').getBoundingClientRect().bottom + 16);
+    const bottom = height - (mobile ? 260 : 200);
+    return clamp(Math.min(Math.max(32, center.x - left - 15) / extent.left, Math.max(32, right - center.x - 15) / extent.right,
+      Math.max(32, center.y - top - 15) / extent.top, Math.max(32, bottom - center.y - 15) / extent.bottom), MIN_ZOOM, MAX_ZOOM);
+  }
+  function reset() { selected = hovered = null; trackedPosition = null; $('planet-label').hidden = true; targetZoom = trueDistances ? Math.min(width * .31, height * .3) / orbitRadius(planets[7]) : 1; $('planet-card').hidden = true; document.querySelector('.intro').classList.remove('focused'); $('scale-note').textContent = trueDistances ? 'PRŮMĚRY I VZDÁLENOSTI V MĚŘÍTKU' : 'PRŮMĚRY V MĚŘÍTKU · DRÁHY ZKRÁCENÉ'; document.querySelectorAll('.planet-button').forEach((button) => { button.classList.remove('selected'); button.setAttribute('aria-pressed', 'false'); }); }
   for (const body of [sun, ...planets]) { const button = document.createElement('button'); button.className = 'planet-button'; button.dataset.planet = body.id; button.dataset.diameterKm = body.diameterKm; button.setAttribute('aria-pressed', 'false'); const dot = document.createElement('span'); dot.className = 'planet-swatch'; dot.style.setProperty('--planet-color', body.color); dot.setAttribute('aria-hidden', 'true'); button.append(dot, document.createTextNode(body.name)); button.addEventListener('click', () => selectBody(body)); $('planet-buttons').append(button); }
   canvas.addEventListener('pointermove', pointerMove);
   canvas.addEventListener('pointerleave', () => { pointer.x = pointer.y = 0; pointer.active = false; hovered = null; $('planet-label').hidden = true; });
@@ -487,7 +570,7 @@
   canvas.addEventListener('wheel', (event) => { event.preventDefault(); targetZoom = clamp(targetZoom * Math.exp(-event.deltaY * .0015), MIN_ZOOM, MAX_ZOOM); }, { passive: false });
   $('explore-button').addEventListener('click', () => selectBody(bodyById.get('earth')));
   $('parent-button').addEventListener('click', () => { if (selected?.parent) selectBody(selected.parent); });
-  $('moon-toggle').addEventListener('click', () => { showMoons = !showMoons; $('moon-toggle').setAttribute('aria-pressed', String(showMoons)); $('moon-toggle').textContent = showMoons ? 'Měsíce viditelné' : 'Měsíce skryté'; hovered = null; $('planet-label').hidden = true; if (!showMoons && selected?.parent) selectBody(selected.parent); });
+  $('moon-toggle').addEventListener('click', () => { showMoons = !showMoons; $('moon-toggle').setAttribute('aria-pressed', String(showMoons)); $('moon-toggle').textContent = showMoons ? 'Měsíce viditelné' : 'Měsíce skryté'; hovered = null; $('planet-label').hidden = true; if (!showMoons && selected?.parent) selectBody(selected.parent); if (showMoons && selected?.moons?.length) targetZoom = Math.min(targetZoom, systemZoom(selected)); });
   $('distance-toggle').addEventListener('click', () => { trueDistances = !trueDistances; positionCache.clear(); $('distance-toggle').setAttribute('aria-pressed', String(trueDistances)); $('distance-toggle').textContent = trueDistances ? 'Skutečné vzdálenosti' : 'Přehledné vzdálenosti'; cameraX = cameraY = 0; zoom = trueDistances ? Math.min(width * .31, height * .3) / orbitRadius(planets[7]) : 1; reset(); notify(trueDistances ? 'Ve skutečném měřítku jsou planety drobné. Vyber je v seznamu.' : 'Dráhy jsou zkrácené. Poměry velikostí zůstávají skutečné.'); });
   for (const id of ['home-button', 'close-card', 'return-button', 'reset-button']) $(id).addEventListener('click', reset);
   function syncSpeed() {

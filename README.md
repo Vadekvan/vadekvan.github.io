@@ -12,6 +12,9 @@ Otevři `index.html` v moderním prohlížeči, nebo v této složce spusť vlas
 - Kliknutí do prázdné scény: roj meteorů.
 - Kliknutí na planetu nebo její tlačítko: přiblížení a informace.
 - Tlačítka měsíců v detailu planety: přiblížení jednotlivých měsíců, návrat k jejich planetě.
+- V detailu planety mají i nejmenší měsíce klikací popisky a značky polohy. Kroužek a bod jsou orientační značky v pixelech, průměr samotného tělesa zůstává ve skutečném měřítku. Zakrytý měsíc má přerušovanou značku a text „za planetou“ nebo „za Sluncem“.
+- Početné soustavy Jupiteru, Saturnu a Neptunu mají popisky ve dvou sloupcích spojené čarami s pozicemi měsíců, aby se neprolínaly ani při skutečných vzdálenostech. Kliknutí na text má přednost před značkou jiného tělesa pod ním.
+- Při výběru planety se kamera přizpůsobí rozsahu drah jejích měsíců, aby se celá soustava vešla vedle informací a ovládání. Platí i pro skutečné vzdálenosti; na mobilu je panel času nad detailem.
 - Přepínač vzdáleností: přehled se zkrácenými drahami, nebo skutečné měřítko vzdáleností i průměrů.
 - Přepínač měsíců: zobrazení nebo skrytí satelitů a jejich drah.
 - Datum nad scénou: skutečný čas simulace v UTC a informace, zda polohy leží v rozsahu dat JPL.

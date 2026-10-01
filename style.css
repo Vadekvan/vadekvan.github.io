@@ -60,3 +60,7 @@ dialog a{color:#c6b297;text-underline-offset:3px}
 @media(max-width:1100px){.time-tools{top:200px;gap:10px}.time-actions{flex-direction:column}.time-actions button{font-size:8px;padding:6px 8px}}
 @media(max-width:760px){.time-tools{left:7%;right:7%;max-width:none;top:auto;bottom:257px;padding:9px 10px;justify-content:space-between;gap:5px}.time-actions{flex-direction:row;gap:5px}.time-actions button{font-size:8px;padding:9px 7px}#simulation-date{font-size:9px}#ephemeris-status{font-size:7px}#time-mode{font-size:6px}}
 @media(max-height:650px) and (min-width:761px){.time-tools{top:173px;padding:7px 10px}}
+
+/* Leave the mobile satellite scene clear of the clock and information card. */
+@media(max-width:760px){.intro.focused~.time-tools{top:84px;bottom:auto}.intro.focused~.scene-coordinate{display:none}.planet-card{top:20%;max-height:29dvh}}
+@media(max-width:760px){body:has(.intro.focused) .toast{bottom:auto;top:146px}}
